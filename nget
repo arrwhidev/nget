@@ -68,8 +68,7 @@ EOF
     chmod 700 "$AUTH_FILE"
 
     echo "Do you want to configure some default values? (y/n)"
-    echo -n "WARNING: Will overwrite all data in <home>/.nget-defaults" && echo ""
-    read yn
+    echo "WARNING: Will overwrite all data in <home>/.nget-defaults" && read yn
     if [[ "$yn" == "y" ]]; then
         echo -n "Repository: " && read repo_
         echo -n "Group: " && read group_        
