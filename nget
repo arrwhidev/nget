@@ -1,0 +1,149 @@
+#!/bin/bash
+
+# Author: Arran White [@arranwhite_]
+# GitHub: https://github.com/arrwhidev/nget
+
+function showHelp() {
+cat <<EOF
+nget
+  * Written to be convenient, not secure. Use at your own risk!
+  * Stores username & password in CLEARTEXT. See above point.
+  * Extremely ALPHA - minimum written for my own needs.         
+  * Currently only supports HTTP GET.   
+  * Tested against Nexus v2.0.
+  * Tested on OSX Mountain Lion and Debian 7.
+
+Usage: nget [options]
+Options:
+    -s, -setup             Setup the nexus configuration (url and authentication).
+    -h, -help              Displays the help.
+    -r                     Specify the repository (will use default if not specified).
+    -g                     Specify the group (will use default if not specified).
+    -a                     Specify the artifact (will use default if not specified).
+    -v                     Specify the version (will use default if not specified).
+    -c                     Specify the classifier (will use default if not specified).
+    -e                     Specify the file type (will use default if not specified).
+EOF
+}
+
+HOME_DIR=`eval echo ~$USER`
+AUTH_FILE="$HOME_DIR/.nget-auth"
+DEFAULTS_FILE="$HOME_DIR/.nget-defaults"
+
+# Helpers.
+function getArgVal() { echo $1 | sed 's/^[^=]*=//'; }
+function getVal() { echo `sed -n 's/^'$1'=// p' $2`; }
+
+# Get values from auth file.
+function getPass() { getVal "pass" $AUTH_FILE; }
+function getUser() { getVal "user" $AUTH_FILE; }
+function getUrl() { getVal "url" $AUTH_FILE; }
+
+# If the value was overriden with an option use that otherwise use the default.
+function getRepo() { if [[ -z "$REPOSITORY" ]]; then getVal "repo" $DEFAULTS_FILE; else echo "$REPOSITORY"; fi; }
+function getGroup() { if [[ -z "$GROUP" ]]; then getVal "group" $DEFAULTS_FILE; else echo "$GROUP"; fi; }
+function getArtifact() { if [[ -z "$ARTIFACT" ]]; then getVal "artifact" $DEFAULTS_FILE; else echo "$ARTIFACT"; fi; }
+function getVersion() { if [[ -z "$VERSION" ]]; then getVal "version" $DEFAULTS_FILE; else echo "$VERSION"; fi; }
+function getClassifier() { if [[ -z "$CLASSIFIER" ]]; then getVal "classifier" $DEFAULTS_FILE; else echo "$CLASSIFIER"; fi; }
+function getType() { if [[ -z "$TYPE" ]]; then getVal "type" $DEFAULTS_FILE; else echo "$TYPE"; fi; }
+
+# Configure the auth and defaults.
+function setup() {
+    echo "WARNING: Will overwrite all data in <home>/.nget-auth"
+
+    echo -n "Please enter nexus repository url: " && read url_
+    echo -n "Please enter username: " && read username_
+    echo -n "Please enter password: "
+    stty -echo
+    read pass_
+    stty echo
+    echo ""
+
+    # Write auth details to file.
+    cat > "$AUTH_FILE" <<EOF
+url=$url_
+user=$username_
+pass=$pass_
+EOF
+    chmod 700 "$AUTH_FILE"
+
+    echo "Do you want to configure some default values? (y/n)"
+    echo -n "WARNING: Will overwrite all data in <home>/.nget-defaults" && echo ""
+    read yn
+    if [[ "$yn" == "y" ]]; then
+        echo -n "Repository: " && read repo_
+        echo -n "Group: " && read group_        
+        echo -n "Artifact: " && read artifact_
+        echo -n "Version: " && read version_
+        echo -n "Classifier: " && read classifier_
+        echo -n "File type: " && read type_
+
+        # Write defaults to file.
+        cat > "$DEFAULTS_FILE" <<EOF
+repo=$repo_
+group=$group_
+artifact=$artifact_
+version=$version_
+classifier=$classifier_
+type=$type_
+EOF
+        chmod 700 "$DEFAULTS_FILE"
+    fi
+
+    echo "Setup complete."
+}
+
+function get() {
+    local FULLPATH=`getUrl`"?"
+    FULLPATH+="r=`getRepo`&"
+    FULLPATH+="g=`getGroup`&"
+    FULLPATH+="a=`getArtifact`&"
+    FULLPATH+="v=`getVersion`&"
+    FULLPATH+="c=`getClassifier`&"
+    FULLPATH+="e=`getType`"
+
+    # -u : username and password.
+    # -g : disable url sequences.
+    # -O : write output to file.
+    # -J : use filename in response header.
+    # -X : specifying as GET req.
+    curl -u `getUser`:`getPass` -g -O -J -X GET "$FULLPATH"
+}
+
+for arg in "$@"
+do
+    case "$arg" in
+        -h | -help)
+            showHelp
+            exit 0
+            ;;
+        -s | -setup) 
+            setup
+            exit 0
+            ;;
+        -r=*)
+            REPOSITORY=`getArgVal $arg` ;;
+        -g=*)
+            GROUP=`getArgVal $arg` ;;
+        -a=*)
+            ARTIFACT=`getArgVal $arg` ;;
+        -v=*)
+            VERSION=`getArgVal $arg` ;;
+        -c=*)
+            CLASSIFIER=`getArgVal $arg` ;;
+        -e=*)
+            TYPE=`getArgVal $arg` ;;
+        *)
+            echo "Invalid options."
+            echo "Try 'nget -h' for more information."
+            exit 0
+            ;;
+    esac
+done
+
+[ ! -f "$AUTH_FILE" ] && echo "Auth file doesn't exist. Run setup first: 'nget -s'." && exit 0;
+
+# Run!
+get
+
+# End.
